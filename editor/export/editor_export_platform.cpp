@@ -1089,6 +1089,22 @@ Vector<String> EditorExportPlatform::get_forced_export_files(const Ref<EditorExp
 	return files;
 }
 
+void EditorExportPlatform::get_export_files_from_project_settings(const Ref<EditorExportPreset> &p_preset, HashSet<String> &p_paths) {
+	constexpr static const char *setting_names[] = {
+		"display/mouse_cursor/custom_image",
+		"audio/buses/default_bus_layout",
+		"gui/theme/custom",
+		"gui/theme/custom_font",
+		"xr/openxr/default_action_map",
+	};
+	for (const StringName &setting_name : setting_names) {
+		String path = get_project_setting(p_preset, setting_name);
+		if (!path.is_empty() && FileAccess::exists(path)) {
+			_export_find_dependencies(ResourceUID::ensure_path(path), p_paths);
+		}
+	}
+}
+
 Error EditorExportPlatform::_script_save_file(const Ref<EditorExportPreset> &p_preset, void *p_userdata, const String &p_path, const Vector<uint8_t> &p_data, int p_file, int p_total, const Vector<String> &p_enc_in_filters, const Vector<String> &p_enc_ex_filters, const Vector<uint8_t> &p_key, uint64_t p_seed, bool p_delta) {
 	Callable cb = ((ScriptCallbackData *)p_userdata)->file_cb;
 	ERR_FAIL_COND_V(!cb.is_valid(), FAILED);
@@ -1186,13 +1202,9 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 			_export_find_dependencies(autoload_path, paths);
 		}
 
+		// Add resources from project settings
 		if (scenes_only) {
-			// Add default audio bus layout
-			String audio_bus_path = get_project_setting(p_preset, "audio/buses/default_bus_layout");
-			if (!audio_bus_path.is_empty()) {
-				audio_bus_path = ResourceUID::ensure_path(audio_bus_path);
-				_export_find_dependencies(audio_bus_path, paths);
-			}
+			get_export_files_from_project_settings(p_preset, paths);
 		}
 	}
 
