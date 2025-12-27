@@ -1185,6 +1185,15 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 
 			_export_find_dependencies(autoload_path, paths);
 		}
+
+		if (scenes_only) {
+			// Add default audio bus layout
+			String audio_bus_path = get_project_setting(p_preset, "audio/buses/default_bus_layout");
+			if (!audio_bus_path.is_empty()) {
+				audio_bus_path = ResourceUID::ensure_path(audio_bus_path);
+				_export_find_dependencies(audio_bus_path, paths);
+			}
+		}
 	}
 
 	//add native icons to non-resource include list
