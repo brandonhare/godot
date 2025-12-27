@@ -295,6 +295,8 @@ public:
 
 	static Vector<String> get_forced_export_files(const Ref<EditorExportPreset> &p_preset);
 
+	void get_export_files_from_project_settings(const Ref<EditorExportPreset> &p_preset, HashSet<String> &p_paths);
+
 	virtual bool fill_log_messages(RichTextLabel *p_log, Error p_err);
 
 	virtual void get_export_options(List<ExportOption> *r_options) const = 0;
