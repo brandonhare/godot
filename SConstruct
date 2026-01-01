@@ -489,7 +489,6 @@ env.modules_detected = modules_detected
 
 # Update the environment again after all the module options are added.
 opts.Update(env, {**ARGUMENTS, **env.Dictionary()})
-Help(opts.GenerateHelpText(env))
 
 
 # FIXME: Tool assignment happening at this stage is a direct consequence of getting the platform logic AFTER the SCons
@@ -1202,6 +1201,10 @@ if "c_compiler_launcher" in env:
 
 if "cpp_compiler_launcher" in env:
     env["CXX"] = " ".join([env["cpp_compiler_launcher"], env["CXX"]])
+
+
+# Generate help text after all options have settled into their final values.
+Help(opts.GenerateHelpText(env))
 
 # Build subdirs, the build order is dependent on link order.
 Export("env")
