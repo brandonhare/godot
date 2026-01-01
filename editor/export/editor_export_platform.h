@@ -118,6 +118,7 @@ private:
 
 	void _export_find_resources(EditorFileSystemDirectory *p_dir, HashSet<String> &p_paths);
 	void _export_find_customized_resources(const Ref<EditorExportPreset> &p_preset, EditorFileSystemDirectory *p_dir, EditorExportPreset::FileExportMode p_mode, HashSet<String> &p_paths);
+	void _export_find_project_settings_resources(const Ref<EditorExportPreset> &p_preset, HashSet<String> &p_paths, bool autoloads_only);
 	void _export_find_dependencies(const String &p_path, HashSet<String> &p_paths);
 
 	static Error _save_pack_file(const Ref<EditorExportPreset> &p_preset, void *p_userdata, const String &p_path, const Vector<uint8_t> &p_data, int p_file, int p_total, const Vector<String> &p_enc_in_filters, const Vector<String> &p_enc_ex_filters, const Vector<uint8_t> &p_key, uint64_t p_seed, bool p_delta);
@@ -294,8 +295,6 @@ public:
 	Dictionary get_internal_export_files(const Ref<EditorExportPreset> &p_preset, bool p_debug);
 
 	static Vector<String> get_forced_export_files(const Ref<EditorExportPreset> &p_preset);
-
-	void get_export_files_from_project_settings(const Ref<EditorExportPreset> &p_preset, HashSet<String> &p_paths);
 
 	virtual bool fill_log_messages(RichTextLabel *p_log, Error p_err);
 
