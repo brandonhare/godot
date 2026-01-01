@@ -530,6 +530,54 @@ void EditorExportPlatform::_export_find_customized_resources(const Ref<EditorExp
 	}
 }
 
+// TODO: add comments
+void EditorExportPlatform::_export_find_project_settings_resources(const Ref<EditorExportPreset> &p_preset, HashSet<String> &p_paths, bool autoloads_only) {
+	List<PropertyInfo> props;
+	ProjectSettings::get_singleton()->get_property_list(&props);
+
+	for (const PropertyInfo &pi : props) {
+		bool is_autoload = pi.name.begins_with("autoload/");
+		if (!is_autoload && (!autoloads_only || pi.hint != PROPERTY_HINT_FILE)) {
+			// TODO: ^ simplify this conditional
+			continue;
+		}
+
+		// Don't include application icons in the bundle at this point, they are handled elsewhere.
+		if (pi.name.begins_with("application/") && (pi.name.ends_with("icon") || pi.name.ends_with("image"))) {
+			// TODO: test boot splash isn't skipped
+			continue;
+		}
+		// Don't automatically include the main scene if the user didn't select it.
+		if (pi.name == "application/run/main_scene") {
+			continue;
+		}
+
+		String resource_path = get_project_setting(p_preset, pi.name);
+		if (resource_path.is_empty()) {
+			continue;
+		}
+
+		if (is_autoload && resource_path.begins_with("*")) {
+			resource_path = resource_path.substr(1);
+		}
+
+		if (resource_path.begins_with("uid://")) {
+			resource_path = ResourceUID::uid_to_path(resource_path);
+		}
+
+		if (!resource_path.begins_with("res://")) {
+			// shouldn't happen, but try to avoid pulling in non-project files
+			continue;
+		}
+
+		if (!FileAccess::exists(resource_path)) {
+			continue;
+		}
+
+		_export_find_dependencies(resource_path, p_paths);
+	}
+}
+
 void EditorExportPlatform::_export_find_dependencies(const String &p_path, HashSet<String> &p_paths) {
 	if (p_paths.has(p_path)) {
 		return;
@@ -1089,22 +1137,6 @@ Vector<String> EditorExportPlatform::get_forced_export_files(const Ref<EditorExp
 	return files;
 }
 
-void EditorExportPlatform::get_export_files_from_project_settings(const Ref<EditorExportPreset> &p_preset, HashSet<String> &p_paths) {
-	constexpr static const char *setting_names[] = {
-		"display/mouse_cursor/custom_image",
-		"audio/buses/default_bus_layout",
-		"gui/theme/custom",
-		"gui/theme/custom_font",
-		"xr/openxr/default_action_map",
-	};
-	for (const StringName &setting_name : setting_names) {
-		String path = get_project_setting(p_preset, setting_name);
-		if (!path.is_empty() && FileAccess::exists(path)) {
-			_export_find_dependencies(ResourceUID::ensure_path(path), p_paths);
-		}
-	}
-}
-
 Error EditorExportPlatform::_script_save_file(const Ref<EditorExportPreset> &p_preset, void *p_userdata, const String &p_path, const Vector<uint8_t> &p_data, int p_file, int p_total, const Vector<String> &p_enc_in_filters, const Vector<String> &p_enc_ex_filters, const Vector<uint8_t> &p_key, uint64_t p_seed, bool p_delta) {
 	Callable cb = ((ScriptCallbackData *)p_userdata)->file_cb;
 	ERR_FAIL_COND_V(!cb.is_valid(), FAILED);
@@ -1172,40 +1204,26 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 		}
 	} else if (p_preset->get_export_filter() == EditorExportPreset::EXPORT_CUSTOMIZED) {
 		_export_find_customized_resources(p_preset, EditorFileSystem::get_singleton()->get_filesystem(), p_preset->get_file_export_mode("res://"), paths);
+		// TODO: include project settings files too?
 	} else {
 		bool scenes_only = p_preset->get_export_filter() == EditorExportPreset::EXPORT_SELECTED_SCENES;
 
 		Vector<String> files = p_preset->get_files_to_export();
-		for (int i = 0; i < files.size(); i++) {
-			if (scenes_only && ResourceLoader::get_resource_type(files[i]) != "PackedScene") {
+		for (const String &file : files) {
+			if (scenes_only && ResourceLoader::get_resource_type(file) != "PackedScene") {
 				continue;
 			}
 
-			_export_find_dependencies(files[i], paths);
+			_export_find_dependencies(file, paths);
 		}
 
-		// Add autoload resources and their dependencies
-		List<PropertyInfo> props;
-		ProjectSettings::get_singleton()->get_property_list(&props);
+		// Add autoloads and other resources from project settings.
+		_export_find_project_settings_resources(p_preset, paths, scenes_only);
+	}
 
-		for (const PropertyInfo &pi : props) {
-			if (!pi.name.begins_with("autoload/")) {
-				continue;
-			}
-
-			String autoload_path = get_project_setting(p_preset, pi.name);
-
-			if (autoload_path.begins_with("*")) {
-				autoload_path = autoload_path.substr(1);
-			}
-
-			_export_find_dependencies(autoload_path, paths);
-		}
-
-		// Add resources from project settings
-		if (scenes_only) {
-			get_export_files_from_project_settings(p_preset, paths);
-		}
+	String main_scene_path = ResourceUID::ensure_path(get_project_setting(p_preset, "application/run/main_scene"));
+	if (!main_scene_path.is_empty() && !paths.has(main_scene_path)) {
+		add_message(EXPORT_MESSAGE_WARNING, TTR("Export"), TTR("Main scene was not included in the export!"));
 	}
 
 	//add native icons to non-resource include list
