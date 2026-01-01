@@ -32,7 +32,10 @@
 
 #include "openxr_spatial_entities.h"
 #include "openxr_spatial_entity_extension.h"
+
+#ifndef PHYSICS_3D_DISABLED
 #include "scene/resources/3d/shape_3d.h"
+#endif // PHYSICS_3D_DISABLED
 
 // Plane tracking capability configuration
 class OpenXRSpatialCapabilityConfigurationPlaneTracking : public OpenXRSpatialCapabilityConfigurationBaseHeader {
@@ -164,7 +167,10 @@ public:
 
 	Transform3D get_mesh_offset() const;
 	Ref<Mesh> get_mesh();
+
+#ifndef PHYSICS_3D_DISABLED
 	Ref<Shape3D> get_shape(real_t p_thickness = 0.01);
+#endif // PHYSICS_3D_DISABLED
 
 protected:
 	static void _bind_methods();
@@ -182,7 +188,10 @@ private:
 		PackedInt32Array indices;
 
 		Ref<Mesh> mesh;
+
+#ifndef PHYSICS_3D_DISABLED
 		Ref<Shape3D> shape3d;
+#endif // PHYSICS_3D_DISABLED
 	} mesh;
 
 	struct Edge {
