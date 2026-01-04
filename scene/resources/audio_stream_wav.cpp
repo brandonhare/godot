@@ -681,6 +681,9 @@ Ref<AudioStreamWAV> AudioStreamWAV::load_from_buffer(const Vector<uint8_t> &p_st
 	uint64_t file_size = file->get_length();
 	if (file_size != file_size_header) {
 		WARN_PRINT(vformat("File size %d is %s than the expected size %d.", file_size, file_size > file_size_header ? "larger" : "smaller", file_size_header));
+		if (file_size > file_size_header) {
+			file_size = file_size_header;
+		}
 	}
 
 	/* CHECK WAVE */
@@ -722,9 +725,14 @@ Ref<AudioStreamWAV> AudioStreamWAV::load_from_buffer(const Vector<uint8_t> &p_st
 		uint32_t chunksize = file->get_32();
 		uint32_t file_pos = file->get_position(); //save file pos, so we can skip to next chunk safely
 
-		if (file->eof_reached()) {
-			//ERR_PRINT("EOF REACH");
+		if (file->eof_reached() || file_pos >= file_size) {
 			break;
+		}
+
+		uint64_t remaining_bytes = file_size - file_pos;
+		if (remaining_bytes < chunksize) {
+			WARN_PRINT("WAV chunk size is smaller than expected. Proceeding with actual data size.");
+			chunksize = remaining_bytes;
 		}
 
 		if (chunk_id[0] == 'f' && chunk_id[1] == 'm' && chunk_id[2] == 't' && chunk_id[3] == ' ' && !format_found) {
@@ -769,15 +777,8 @@ Ref<AudioStreamWAV> AudioStreamWAV::load_from_buffer(const Vector<uint8_t> &p_st
 				break;
 			}
 
-			uint64_t remaining_bytes = file_size - file_pos;
-			frames = chunksize;
-			if (remaining_bytes < chunksize) {
-				WARN_PRINT("Data chunk size is smaller than expected. Proceeding with actual data size.");
-				frames = remaining_bytes;
-			}
-
 			ERR_FAIL_COND_V(format_channels == 0, Ref<AudioStreamWAV>());
-			frames /= format_channels;
+			frames = chunksize / format_channels;
 			frames /= (format_bits >> 3);
 
 			/*print_line("chunksize: "+itos(chunksize));
@@ -875,18 +876,22 @@ Ref<AudioStreamWAV> AudioStreamWAV::load_from_buffer(const Vector<uint8_t> &p_st
 
 			char list_id[4];
 			file->get_buffer((uint8_t *)&list_id, 4);
-			uint32_t end_of_chunk = file_pos + chunksize - 8;
+			uint32_t end_of_chunk = file_pos + chunksize;
 
 			if (list_id[0] == 'I' && list_id[1] == 'N' && list_id[2] == 'F' && list_id[3] == 'O') {
 				// 'INFO' list type.
 				// The size of an entry can be arbitrary.
-				while (file->get_position() < end_of_chunk) {
+				while (file->get_position() + 8 < end_of_chunk) {
 					char info_id[4];
 					file->get_buffer((uint8_t *)&info_id, 4);
 
 					uint32_t text_size = file->get_32();
 					if (text_size == 0) {
 						continue;
+					}
+					if (file->get_position() + text_size > end_of_chunk) {
+						WARN_PRINT("WAV info chunk has invalid size!");
+						break;
 					}
 
 					Vector<char> text;
