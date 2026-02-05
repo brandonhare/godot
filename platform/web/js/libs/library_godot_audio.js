@@ -1038,7 +1038,7 @@ class Bus {
 
 	/**
 	 * Wrapper to simply add a sample node to the bus.
-	 * @param {SampleNode} sampleNode `SampleNode` to remove
+	 * @param {SampleNode} sampleNode `SampleNode` to add
 	 * @returns {void}
 	 */
 	addSampleNode(sampleNode) {
