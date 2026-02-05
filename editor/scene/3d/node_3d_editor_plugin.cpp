@@ -859,6 +859,8 @@ void Node3DEditorViewport::_select_clicked(bool p_allow_locked) {
 		if (top_node_list.size() == 1) {
 			EditorNode::get_singleton()->edit_node(top_node_list.front()->get());
 		}
+	} else if (!clicked_wants_append) {
+		editor_selection->clear();
 	}
 }
 
