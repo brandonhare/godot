@@ -535,6 +535,7 @@ Error AudioStreamWAV::save_to_wav(const String &p_path) {
 	}
 
 	int sub_chunk_2_size = data_bytes; //Subchunk2Size = Size of data in bytes
+	int sub_chunk_2_padding = sub_chunk_2_size & 1; // Odd chunk sizes require a padding byte.
 
 	// Format code
 	// 1:PCM format (for 8 or 16 bit)
@@ -570,7 +571,7 @@ Error AudioStreamWAV::save_to_wav(const String &p_path) {
 
 	// Create WAV Header
 	file->store_string("RIFF"); //ChunkID
-	file->store_32(sub_chunk_2_size + 36); //ChunkSize = 36 + SubChunk2Size (size of entire file minus the 8 bits for this and previous header)
+	file->store_32(sub_chunk_2_size + sub_chunk_2_padding + 36); //ChunkSize = 36 + SubChunk2Size (size of entire file minus the 8 bits for this and previous header)
 	file->store_string("WAVE"); //Format
 	file->store_string("fmt "); //Subchunk1ID
 	file->store_32(16); //Subchunk1Size = 16
@@ -590,6 +591,9 @@ Error AudioStreamWAV::save_to_wav(const String &p_path) {
 			for (uint64_t i = 0; i < data_bytes; i++) {
 				uint8_t data_point = (read_data[i] + 128);
 				file->store_8(data_point);
+			}
+			if (sub_chunk_2_padding) {
+				file->store_8(0);
 			}
 			break;
 		case AudioStreamWAV::FORMAT_16_BITS:
@@ -912,7 +916,7 @@ Ref<AudioStreamWAV> AudioStreamWAV::load_from_buffer(const Vector<uint8_t> &p_st
 
 		// Move to the start of the next chunk. Note that RIFF requires a padding byte for odd
 		// chunk sizes.
-		file->seek(file_pos + chunksize + (chunksize & 1));
+		file->seek(MIN(file_pos + chunksize + (chunksize & 1), file_size_header));
 	}
 
 	// STEP 2, APPLY CONVERSIONS
