@@ -135,6 +135,7 @@ protected:
 
 	bool processing = false;
 	bool active = true;
+	bool awaiting_signal = false;
 
 	void _set_process(bool p_process, bool p_force = false);
 
@@ -303,6 +304,12 @@ protected:
 		}
 	};
 
+	struct TrackCacheSignal : public TrackCache {
+		TrackCacheSignal() {
+			type = Animation::TYPE_SIGNAL;
+		}
+	};
+
 	RootMotionCache root_motion_cache;
 	AHashMap<Animation::TypeHash, TrackCache *, HashHasher> track_cache;
 	AHashMap<Ref<Animation>, LocalVector<TrackCache *>> animation_track_num_to_track_cache;
@@ -371,6 +378,8 @@ protected:
 	void _blend_apply();
 	virtual void _blend_post_process();
 	void _call_object(ObjectID p_object_id, const StringName &p_method, const Vector<Variant> &p_params, bool p_deferred);
+	void _await_signal(ObjectID p_object_id, const StringName &signal);
+	void _on_signal_awaited();
 
 	/* ---- Capture feature ---- */
 	struct CaptureCache {

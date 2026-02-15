@@ -103,6 +103,7 @@ public:
 
 	Callable bindp(const Variant **p_arguments, int p_argcount) const;
 	Callable unbind(int p_argcount) const;
+	Callable unbind_all() const;
 
 	Object *get_object() const;
 	ObjectID get_object_id() const;

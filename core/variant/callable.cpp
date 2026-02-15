@@ -148,6 +148,9 @@ Callable Callable::unbind(int p_argcount) const {
 	ERR_FAIL_COND_V_MSG(p_argcount <= 0, Callable(*this), "Amount of unbind() arguments must be 1 or greater.");
 	return Callable(memnew(CallableCustomUnbind(*this, p_argcount)));
 }
+Callable Callable::unbind_all() const {
+	return Callable(memnew(CallableCustomUnbindAll(*this)));
+}
 
 bool Callable::is_valid() const {
 	if (is_custom()) {

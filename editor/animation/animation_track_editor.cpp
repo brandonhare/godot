@@ -430,6 +430,22 @@ bool AnimationTrackKeyEdit::_set(const StringName &p_name, const Variant &p_valu
 				return true;
 			}
 		} break;
+		case Animation::TYPE_SIGNAL: {
+			if (name == "signal") {
+				StringName signal_name = p_value;
+				setting = true;
+				undo_redo->create_action(TTR("Animation Change Signal"), UndoRedo::MERGE_ENDS);
+				StringName prev = animation->signal_track_get_key_signal(track, key);
+				undo_redo->add_do_method(animation.ptr(), "signal_track_set_key_signal", track, key, signal_name);
+				undo_redo->add_undo_method(animation.ptr(), "signal_track_set_key_signal", track, key, prev);
+				undo_redo->add_do_method(this, "_update_obj", animation);
+				undo_redo->add_undo_method(this, "_update_obj", animation);
+				undo_redo->commit_action();
+
+				setting = false;
+				return true;
+			}
+		} break;
 	}
 
 	return false;
@@ -543,6 +559,12 @@ bool AnimationTrackKeyEdit::_get(const StringName &p_name, Variant &r_ret) const
 			}
 
 		} break;
+		case Animation::TYPE_SIGNAL: {
+			if (name == "signal") {
+				r_ret = animation->signal_track_get_key_signal(track, key);
+				return true;
+			}
+		}
 	}
 
 	return false;
@@ -665,6 +687,9 @@ void AnimationTrackKeyEdit::_get_property_list(List<PropertyInfo> *p_list) const
 
 			p_list->push_back(PropertyInfo(Variant::STRING_NAME, PNAME("animation"), PROPERTY_HINT_ENUM, animations));
 
+		} break;
+		case Animation::TYPE_SIGNAL: {
+			p_list->push_back(PropertyInfo(Variant::STRING_NAME, PNAME("signal")));
 		} break;
 	}
 
@@ -984,6 +1009,20 @@ bool AnimationMultiTrackKeyEdit::_set(const StringName &p_name, const Variant &p
 						update_obj = true;
 					}
 				} break;
+				case Animation::TYPE_SIGNAL: {
+					if (name == "signal") {
+						StringName signal_name = p_value;
+
+						if (!setting) {
+							setting = true;
+							undo_redo->create_action(TTR("Animation Multi Change Keyframe Value"), UndoRedo::MERGE_ENDS);
+						}
+						StringName prev = animation->signal_track_get_key_signal(track, key);
+						undo_redo->add_do_method(animation.ptr(), "signal_track_set_key_signal", track, key, signal_name);
+						undo_redo->add_undo_method(animation.ptr(), "signal_track_set_key_signal", track, key, prev);
+						update_obj = true;
+					}
+				} break;
 			}
 		}
 	}
@@ -1116,6 +1155,13 @@ bool AnimationMultiTrackKeyEdit::_get(const StringName &p_name, Variant &r_ret) 
 				case Animation::TYPE_ANIMATION: {
 					if (name == "animation") {
 						r_ret = animation->animation_track_get_key_animation(track, key);
+						return true;
+					}
+
+				} break;
+				case Animation::TYPE_SIGNAL: {
+					if (name == "signal") {
+						r_ret = animation->signal_track_get_key_signal(track, key);
 						return true;
 					}
 
@@ -1270,6 +1316,9 @@ void AnimationMultiTrackKeyEdit::_get_property_list(List<PropertyInfo> *p_list) 
 				animations += "[stop]";
 
 				p_list->push_back(PropertyInfo(Variant::STRING_NAME, "animation", PROPERTY_HINT_ENUM, animations));
+			} break;
+			case Animation::TYPE_SIGNAL: {
+				p_list->push_back(PropertyInfo(Variant::STRING_NAME, "signal"));
 			} break;
 		}
 	}
@@ -1473,6 +1522,7 @@ void AnimationTimelineEdit::_notification(int p_what) {
 			add_track->get_popup()->add_icon_item(get_editor_theme_icon(SNAME("KeyBezier")), TTR("Bezier Curve Track..."));
 			add_track->get_popup()->add_icon_item(get_editor_theme_icon(SNAME("KeyAudio")), TTR("Audio Playback Track..."));
 			add_track->get_popup()->add_icon_item(get_editor_theme_icon(SNAME("KeyAnimation")), TTR("Animation Playback Track..."));
+			add_track->get_popup()->add_icon_item(get_editor_theme_icon(SNAME("Signals")), TTR("Signal Track..."));
 
 			timeline_resize_rect.size = get_editor_theme_icon(SNAME("TimelineHandle"))->get_size();
 		} break;
@@ -2220,6 +2270,8 @@ void AnimationTrackEdit::_notification(int p_what) {
 						text = TTR("Audio Clips:");
 					} else if (animation->track_get_type(track) == Animation::TYPE_ANIMATION) {
 						text = TTR("Animation Clips:");
+					} else if (animation->track_get_type(track) == Animation::TYPE_SIGNAL) {
+						text = TTR("Signals:");
 					} else {
 						text += anim_path.get_concatenated_subnames();
 					}
@@ -2584,7 +2636,7 @@ void AnimationTrackEdit::draw_key_link(int p_index_from, int p_index_to, float p
 
 	Variant current = animation->track_get_key_value(get_track(), p_index_from);
 	Variant next = animation->track_get_key_value(get_track(), p_index_to);
-	if (current != next || animation->track_get_type(get_track()) == Animation::TrackType::TYPE_METHOD) {
+	if (current != next || animation->track_get_type(get_track()) == Animation::TrackType::TYPE_METHOD || animation->track_get_type(get_track()) == Animation::TrackType::TYPE_SIGNAL) {
 		return;
 	}
 
@@ -2648,6 +2700,19 @@ void AnimationTrackEdit::draw_key(int p_index, float p_pixels_sec, int p_x, bool
 			text += args[i].get_construct_string();
 		}
 		text += ")";
+
+		int limit = editor->is_function_name_pressed() ? 0 : MAX(0, p_clip_right - p_x - icon_to_draw->get_width() * 2);
+
+		if (limit > 0) {
+			draw_string(font, Vector2(p_x + icon_to_draw->get_width(), int(get_size().height - font->get_height(font_size)) / 2 + font->get_ascent(font_size)), text, HORIZONTAL_ALIGNMENT_LEFT, limit, font_size, color);
+		}
+	} else if (animation->track_get_type(track) == Animation::TYPE_SIGNAL) {
+		const Ref<Font> font = get_theme_font(SceneStringName(font), SNAME("Label"));
+		const int font_size = get_theme_font_size(SceneStringName(font_size), SNAME("Label"));
+		Color color = get_theme_color(SceneStringName(font_color), SNAME("Label"));
+		color.a = 0.5;
+
+		StringName text = animation->signal_track_get_key_signal(track, p_index);
 
 		int limit = editor->is_function_name_pressed() ? 0 : MAX(0, p_clip_right - p_x - icon_to_draw->get_width() * 2);
 
@@ -2839,7 +2904,7 @@ bool AnimationTrackEdit::_is_value_key_valid(const Variant &p_key_value, Variant
 }
 
 Ref<Texture2D> AnimationTrackEdit::_get_key_type_icon() const {
-	const Ref<Texture2D> type_icons[9] = {
+	const Ref<Texture2D> type_icons[10] = {
 		get_editor_theme_icon(SNAME("KeyValue")),
 		get_editor_theme_icon(SNAME("KeyTrackPosition")),
 		get_editor_theme_icon(SNAME("KeyTrackRotation")),
@@ -2848,13 +2913,14 @@ Ref<Texture2D> AnimationTrackEdit::_get_key_type_icon() const {
 		get_editor_theme_icon(SNAME("KeyCall")),
 		get_editor_theme_icon(SNAME("KeyBezier")),
 		get_editor_theme_icon(SNAME("KeyAudio")),
-		get_editor_theme_icon(SNAME("KeyAnimation"))
+		get_editor_theme_icon(SNAME("KeyAnimation")),
+		get_editor_theme_icon(SNAME("Signals")),
 	};
 	return type_icons[animation->track_get_type(track)];
 }
 
 Control::CursorShape AnimationTrackEdit::get_cursor_shape(const Point2 &p_pos) const {
-	if (command_or_control_pressed && animation->track_get_type(track) == Animation::TYPE_METHOD && hovering_key_idx != -1) {
+	if (command_or_control_pressed && (animation->track_get_type(track) == Animation::TYPE_METHOD || animation->track_get_type(track) == Animation::TYPE_SIGNAL) && hovering_key_idx != -1) {
 		return Control::CURSOR_POINTING_HAND;
 	}
 	return get_default_cursor_shape();
@@ -3025,6 +3091,10 @@ String AnimationTrackEdit::get_tooltip(const Point2 &p_pos) const {
 				case Animation::TYPE_ANIMATION: {
 					String name = animation->animation_track_get_key_animation(track, key_idx);
 					text += TTR("Animation Clip:") + " " + name;
+				} break;
+				case Animation::TYPE_SIGNAL: {
+					String name = animation->signal_track_get_key_signal(track, key_idx);
+					text += TTR("Signal:") + " " + name;
 				} break;
 			}
 			return text;
@@ -3239,6 +3309,12 @@ void AnimationTrackEdit::gui_input(const Ref<InputEvent> &p_event) {
 					if (hovering_key_idx != -1) {
 						lookup_key_idx = hovering_key_idx;
 						menu->add_icon_item(get_editor_theme_icon(SNAME("Help")), vformat("%s (%s)", TTR("Go to Definition"), animation->method_track_get_name(track, lookup_key_idx)), MENU_KEY_LOOKUP);
+						menu->add_separator();
+					}
+				} else if (animation->track_get_type(track) == Animation::TYPE_SIGNAL) {
+					if (hovering_key_idx != -1) {
+						lookup_key_idx = hovering_key_idx;
+						menu->add_icon_item(get_editor_theme_icon(SNAME("Help")), vformat("%s (%s)", TTR("Go to Definition"), animation->signal_track_get_key_signal(track, lookup_key_idx)), MENU_KEY_LOOKUP);
 						menu->add_separator();
 					}
 				}
@@ -3489,7 +3565,7 @@ bool AnimationTrackEdit::_lookup_key(int p_key_idx) const {
 				if (target_script->has_method(method)) {
 					found_in_script = true;
 					// Tell ScriptEditor to show the method's line.
-					ScriptEditor::get_singleton()->script_goto_method(target_script, animation->method_track_get_name(track, p_key_idx));
+					ScriptEditor::get_singleton()->script_goto_method(target_script, method);
 					break;
 				}
 				target_script = target_script->get_base_script().ptr();
@@ -3503,6 +3579,36 @@ bool AnimationTrackEdit::_lookup_key(int p_key_idx) const {
 				} else {
 					// Still not found, which means the target doesn't have this method. Warn the user.
 					WARN_PRINT_ED(TTR(vformat("Failed to lookup method: \"%s\"", method)));
+				}
+			}
+			return true;
+		}
+	} else if (animation->track_get_type(track) == Animation::TYPE_SIGNAL) {
+		Node *target = root->get_node_or_null(animation->track_get_path(track));
+		if (target) {
+			StringName signal_name = animation->signal_track_get_key_signal(track, p_key_idx);
+			// First, check every script in the inheritance chain.
+			bool found_in_script = false;
+			Ref<Script> target_script_ref = target->get_script();
+			Script *target_script = target_script_ref.ptr();
+			while (target_script) {
+				if (target_script->has_script_signal(signal_name)) {
+					found_in_script = true;
+					// Tell ScriptEditor to show the signal's line.
+					ScriptEditor::get_singleton()->script_goto_method(target_script, signal_name);
+					break;
+				}
+				target_script = target_script->get_base_script().ptr();
+			}
+
+			if (!found_in_script) {
+				// Not found in script, so it must be a native signal.
+				if (ClassDB::has_signal(target->get_class_name(), signal_name)) {
+					// Show help page instead.
+					ScriptEditor::get_singleton()->goto_help(vformat("class_signal:%s:%s", target->get_class_name(), signal_name));
+				} else {
+					// Still not found, which means the target doesn't have this signal. Warn the user.
+					WARN_PRINT_ED(TTR(vformat("Failed to lookup signal: \"%s\"", signal_name)));
 				}
 			}
 			return true;
@@ -5104,7 +5210,7 @@ bool AnimationTrackEditor::can_add_reset_key() const {
 	}
 	for (const KeyValue<SelectedKey, KeyInfo> &E : selection) {
 		const Animation::TrackType track_type = animation->track_get_type(E.key.track);
-		if (track_type != Animation::TYPE_ANIMATION && track_type != Animation::TYPE_AUDIO && track_type != Animation::TYPE_METHOD) {
+		if (track_type != Animation::TYPE_ANIMATION && track_type != Animation::TYPE_AUDIO && track_type != Animation::TYPE_METHOD && track_type != Animation::TYPE_SIGNAL) {
 			return true;
 		}
 	}
@@ -5715,6 +5821,15 @@ void AnimationTrackEditor::_new_track_node_selected(NodePath p_path) {
 			undo_redo->commit_action();
 
 		} break;
+		case Animation::TYPE_SIGNAL: {
+			EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
+			undo_redo->create_action(TTR("Add Track"));
+			undo_redo->add_do_method(animation.ptr(), "add_track", adding_track_type);
+			undo_redo->add_do_method(animation.ptr(), "track_set_path", animation->get_track_count(), path_to);
+			undo_redo->add_undo_method(animation.ptr(), "remove_track", animation->get_track_count());
+			undo_redo->commit_action();
+
+		} break;
 	}
 }
 
@@ -5922,6 +6037,12 @@ void AnimationTrackEditor::_insert_key_from_track(float p_ofs, int p_track) {
 		insert_key_from_track_call_ofs = p_ofs;
 		insert_key_from_track_call_track = p_track;
 		return;
+	} else if (animation->track_get_type(p_track) == Animation::TYPE_SIGNAL) {
+		signal_selector->select_signal_from_instance(node);
+
+		insert_key_from_track_signal_ofs = p_ofs;
+		insert_key_from_track_signal_track = p_track;
+		return;
 	}
 
 	InsertData id;
@@ -6006,6 +6127,15 @@ void AnimationTrackEditor::_insert_key_from_track(float p_ofs, int p_track) {
 		case Animation::TYPE_ANIMATION: {
 			id.value = StringName("[stop]");
 		} break;
+		case Animation::TYPE_SIGNAL: {
+			Node *base = root->get_node_or_null(animation->track_get_path(p_track));
+			ERR_FAIL_NULL(base);
+
+			method_selector->select_signal_from_instance(base);
+
+			insert_key_from_track_signal_ofs = p_ofs;
+			insert_key_from_track_signal_track = p_track;
+		} break;
 		default: {
 			// All track types should be handled by now.
 			DEV_ASSERT(false);
@@ -6058,6 +6188,28 @@ void AnimationTrackEditor::_add_method_key(const String &p_method) {
 	}
 
 	EditorNode::get_singleton()->show_warning(TTR("Method not found in object:") + " " + p_method);
+}
+
+void AnimationTrackEditor::_add_signal_key(const String &p_signal) {
+	if (!root->has_node(animation->track_get_path(insert_key_from_track_call_track))) {
+		EditorNode::get_singleton()->show_warning(TTR("Track path is invalid, so can't add a method key."));
+		return;
+	}
+	Node *base = root->get_node_or_null(animation->track_get_path(insert_key_from_track_call_track));
+	ERR_FAIL_NULL(base);
+
+	if (base->has_signal(p_signal)) {
+		EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
+		undo_redo->create_action(TTR("Add Signal Track Key"));
+		undo_redo->add_do_method(animation.ptr(), "signal_track_insert_key", insert_key_from_track_signal_track, insert_key_from_track_signal_ofs, p_signal);
+		undo_redo->add_undo_method(this, "_clear_selection_for_anim", animation);
+		undo_redo->add_undo_method(animation.ptr(), "track_remove_key_at_time", insert_key_from_track_signal_track, insert_key_from_track_signal_ofs);
+		undo_redo->commit_action();
+
+		return;
+	}
+
+	EditorNode::get_singleton()->show_warning(TTR("Signal not found in object:") + " " + p_signal);
 }
 
 void AnimationTrackEditor::_key_selected(int p_key, bool p_single, int p_track) {
@@ -6949,6 +7101,9 @@ void AnimationTrackEditor::_edit_menu_pressed(int p_option) {
 					case Animation::TYPE_AUDIO:
 						track_type = TTR("Audio");
 						break;
+					case Animation::TYPE_SIGNAL:
+						track_type = TTR("Signals");
+						break;
 					default: {
 					};
 				}
@@ -7383,7 +7538,7 @@ void AnimationTrackEditor::_edit_menu_pressed(int p_option) {
 				const SelectedKey &sk = E.key;
 
 				const Animation::TrackType track_type = animation->track_get_type(E.key.track);
-				if (track_type == Animation::TYPE_ANIMATION || track_type == Animation::TYPE_AUDIO || track_type == Animation::TYPE_METHOD) {
+				if (track_type == Animation::TYPE_ANIMATION || track_type == Animation::TYPE_AUDIO || track_type == Animation::TYPE_METHOD || track_type == Animation::TYPE_SIGNAL) {
 					continue;
 				}
 
@@ -8368,6 +8523,11 @@ AnimationTrackEditor::AnimationTrackEditor() {
 	add_child(method_selector);
 	method_selector->connect("selected", callable_mp(this, &AnimationTrackEditor::_add_method_key));
 	method_selector->set_accessibility_name(TTRC("Method Key"));
+
+	signal_selector = memnew(PropertySelector);
+	add_child(signal_selector);
+	signal_selector->connect("selected", callable_mp(this, &AnimationTrackEditor::_add_signal_key));
+	signal_selector->set_accessibility_name(TTRC("Signal Key"));
 
 	insert_confirm = memnew(ConfirmationDialog);
 	add_child(insert_confirm);
