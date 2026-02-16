@@ -55,6 +55,7 @@ public:
 		TYPE_BEZIER, // Bezier curve.
 		TYPE_AUDIO,
 		TYPE_ANIMATION,
+		TYPE_SIGNAL,
 	};
 
 	enum InterpolationType : uint8_t {
@@ -233,6 +234,15 @@ private:
 		AnimationTrack() {
 			type = TYPE_ANIMATION;
 		}
+	};
+
+	struct SignalKey : public Key {
+		StringName signal;
+	};
+
+	struct SignalTrack : public Track {
+		LocalVector<SignalKey> signals;
+		SignalTrack() { type = TYPE_SIGNAL; }
 	};
 
 	/* Marker */
@@ -509,6 +519,10 @@ public:
 
 	Vector<Variant> method_track_get_params(int p_track, int p_key_idx) const;
 	StringName method_track_get_name(int p_track, int p_key_idx) const;
+
+	int signal_track_insert_key(int p_track, double p_time, const StringName &p_signal);
+	void signal_track_set_key_signal(int p_track, int p_key, const StringName &p_signal);
+	StringName signal_track_get_key_signal(int p_track, int p_key_idx) const;
 
 	void copy_track(int p_track, Ref<Animation> p_to_animation);
 

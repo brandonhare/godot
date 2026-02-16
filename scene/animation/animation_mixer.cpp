@@ -898,6 +898,17 @@ bool AnimationMixer::_update_caches() {
 						track = track_animation;
 
 					} break;
+					case Animation::TYPE_SIGNAL: {
+						TrackCacheSignal *track_signal = memnew(TrackCacheSignal);
+
+						if (resource.is_valid()) {
+							track_signal->object_id = resource->get_instance_id();
+						} else {
+							track_signal->object_id = child->get_instance_id();
+						}
+
+						track = track_signal;
+					} break;
 					default: {
 						ERR_PRINT("Animation corrupted (invalid track type).");
 						continue;
@@ -989,6 +1000,9 @@ bool AnimationMixer::_update_caches() {
 /* -------------------------------------------- */
 
 void AnimationMixer::_process_animation(double p_delta, bool p_update_only) {
+	if (awaiting_signal) {
+		return;
+	}
 	_blend_init();
 	if (cache_valid && _blend_pre_process(p_delta, track_count, track_map)) {
 		_blend_capture(p_delta);
@@ -1838,6 +1852,32 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 						}
 					}
 				} break;
+				case Animation::TYPE_SIGNAL: {
+#ifdef TOOLS_ENABLED
+					if (!can_call) {
+						continue;
+					}
+#endif // TOOLS_ENABLED
+					if (p_update_only || Math::is_zero_approx(blend)) {
+						continue;
+					}
+					TrackCacheSignal *t = static_cast<TrackCacheSignal *>(track);
+					if (seeked) {
+						int idx = a->track_find_key(i, time, is_external_seeking ? Animation::FIND_MODE_NEAREST : Animation::FIND_MODE_EXACT, true);
+						if (idx < 0) {
+							continue;
+						}
+						StringName signal = a->signal_track_get_key_signal(i, idx);
+						_await_signal(t->object_id, signal);
+					} else {
+						List<int> indices;
+						a->track_get_key_indices_in_range(i, time, delta, start, end, &indices, looped_flag);
+						for (int &F : indices) {
+							StringName signal = a->signal_track_get_key_signal(i, F);
+							_await_signal(t->object_id, signal);
+						}
+					}
+				} break;
 			}
 		}
 	}
@@ -2028,6 +2068,21 @@ void AnimationMixer::_call_object(ObjectID p_object_id, const StringName &p_meth
 		Callable::CallError ce;
 		t_obj->callp(p_method, argptrs, argcount, ce);
 	}
+}
+
+void AnimationMixer::_await_signal(ObjectID p_object_id, const StringName &p_signal) {
+	Object *t_obj = ObjectDB::get_instance(p_object_id);
+	if (!t_obj) {
+		return;
+	}
+	Error err = t_obj->connect(p_signal, callable_mp(this, &AnimationMixer::_on_signal_awaited).unbind_all(), CONNECT_ONE_SHOT);
+	if (err == Error::OK) {
+		awaiting_signal = true;
+	}
+}
+
+void AnimationMixer::_on_signal_awaited() {
+	awaiting_signal = false;
 }
 
 void AnimationMixer::make_animation_instance(const StringName &p_name, const PlaybackInfo p_playback_info) {
@@ -2553,7 +2608,8 @@ AnimationMixer::TrackCache *AnimatedValuesBackup::get_cache_copy(AnimationMixer:
 		}
 
 		case Animation::TYPE_METHOD:
-		case Animation::TYPE_ANIMATION: {
+		case Animation::TYPE_ANIMATION:
+		case Animation::TYPE_SIGNAL: {
 			// Nothing to do here.
 		} break;
 	}
