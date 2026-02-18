@@ -38,7 +38,7 @@ if env["builtin_libvorbis"]:
         "window.c",
     ]
 
-    if env.editor_build:
+    if env.editor_build or True:
         thirdparty_sources += [
             "analysis.c",
             "vorbisenc.c",

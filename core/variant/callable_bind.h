@@ -91,3 +91,14 @@ public:
 
 	CallableCustomUnbind(const Callable &p_callable, int p_argcount);
 };
+
+class CallableCustomUnbindAll : public CallableCustomUnbind {
+public:
+	//for every type that inherits, these must always be the same for this type
+	virtual void call(const Variant **p_arguments, int p_argcount, Variant &r_return_value, Callable::CallError &r_call_error) const override;
+	virtual Error rpc(int p_peer_id, const Variant **p_arguments, int p_argcount, Callable::CallError &r_call_error) const override;
+	virtual int get_argument_count(bool &r_is_valid) const override;
+	virtual int get_unbound_arguments_count() const override;
+
+	CallableCustomUnbindAll(const Callable &p_callable);
+};

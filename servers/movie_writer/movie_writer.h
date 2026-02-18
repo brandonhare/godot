@@ -65,6 +65,7 @@ protected:
 
 	virtual Error write_begin(const Size2i &p_movie_size, uint32_t p_fps, const String &p_base_path);
 	virtual Error write_frame(const Ref<Image> &p_image, const int32_t *p_audio_data);
+	Error write_frame_no_audio(const Ref<Image> &p_image) { return write_frame(p_image, nullptr); }
 	virtual void write_end();
 
 	GDVIRTUAL0RC_REQUIRED(uint32_t, _get_audio_mix_rate)

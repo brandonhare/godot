@@ -42,7 +42,9 @@ void PropertySelector::_text_changed(const String &p_newtext) {
 }
 
 void PropertySelector::_update_search() {
-	if (properties) {
+	if (signals) {
+		set_title(TTRC("Select Signal"));
+	} else if (properties) {
 		set_title(TTRC("Select Property"));
 	} else if (virtuals_only) {
 		set_title(TTRC("Select Virtual Method"));
@@ -149,7 +151,7 @@ void PropertySelector::_update_search() {
 	} else {
 		List<MethodInfo> methods;
 
-		if (type != Variant::NIL) {
+		if (type != Variant::NIL && !signals) {
 			Variant v;
 			Callable::CallError ce;
 			Variant::construct(type, v, nullptr, 0, ce);
@@ -162,8 +164,11 @@ void PropertySelector::_update_search() {
 				}
 
 				List<MethodInfo> script_methods;
-				script_ref->get_script_method_list(&script_methods);
-
+				if (signals) {
+					script_ref->get_script_signal_list(&script_methods);
+				} else {
+					script_ref->get_script_method_list(&script_methods);
+				}
 				methods.push_back(MethodInfo("*Script Methods")); // TODO: Split by inheritance.
 
 				for (const MethodInfo &mi : script_methods) {
@@ -180,7 +185,11 @@ void PropertySelector::_update_search() {
 			StringName base = base_type;
 			while (base) {
 				methods.push_back(MethodInfo("*" + String(base)));
-				ClassDB::get_method_list(base, &methods, true, true);
+				if (signals) {
+					ClassDB::get_signal_list(base, &methods, true);
+				} else {
+					ClassDB::get_method_list(base, &methods, true, true);
+				}
 				base = ClassDB::get_parent_class(base);
 			}
 		}
@@ -241,8 +250,11 @@ void PropertySelector::_update_search() {
 			} else {
 				desc = "void";
 			}
-
-			desc += vformat(" %s(", mi.name);
+			if (signals) {
+				desc = vformat("%s(", mi.name);
+			} else {
+				desc += vformat(" %s(", mi.name);
+			}
 
 			for (int64_t i = 0; i < mi.arguments.size(); ++i) {
 				PropertyInfo &arg = mi.arguments.write[i];
@@ -337,7 +349,12 @@ void PropertySelector::_item_selected() {
 
 	String text;
 	while (!class_type.is_empty()) {
-		if (properties) {
+		if (signals) {
+			if (ClassDB::has_signal(class_type, name, true)) {
+				help_bit->parse_symbol("signal|" + class_type + "|" + name);
+				break;
+			}
+		} else if (properties) {
 			if (ClassDB::has_property(class_type, name, true)) {
 				help_bit->parse_symbol("property|" + class_type + "|" + name);
 				break;
@@ -509,6 +526,7 @@ void PropertySelector::select_method_from_base_type(const String &p_base, const 
 	properties = false;
 	instance = nullptr;
 	virtuals_only = p_virtuals_only;
+	signals = false;
 
 	popup_centered_ratio(0.6);
 	search_box->set_text("");
@@ -525,6 +543,7 @@ void PropertySelector::select_method_from_script(const Ref<Script> &p_script, co
 	properties = false;
 	instance = nullptr;
 	virtuals_only = false;
+	signals = false;
 
 	popup_centered_ratio(0.6);
 	search_box->set_text("");
@@ -541,6 +560,7 @@ void PropertySelector::select_method_from_basic_type(Variant::Type p_type, const
 	properties = false;
 	instance = nullptr;
 	virtuals_only = false;
+	signals = false;
 
 	popup_centered_ratio(0.6);
 	search_box->set_text("");
@@ -562,6 +582,7 @@ void PropertySelector::select_method_from_instance(Object *p_instance, const Str
 	properties = false;
 	instance = nullptr;
 	virtuals_only = false;
+	signals = false;
 
 	popup_centered_ratio(0.6);
 	search_box->set_text("");
@@ -577,6 +598,7 @@ void PropertySelector::select_property_from_base_type(const String &p_base, cons
 	properties = true;
 	instance = nullptr;
 	virtuals_only = false;
+	signals = false;
 
 	popup_centered_ratio(0.6);
 	search_box->set_text("");
@@ -594,6 +616,7 @@ void PropertySelector::select_property_from_script(const Ref<Script> &p_script, 
 	properties = true;
 	instance = nullptr;
 	virtuals_only = false;
+	signals = false;
 
 	popup_centered_ratio(0.6);
 	search_box->set_text("");
@@ -610,6 +633,7 @@ void PropertySelector::select_property_from_basic_type(Variant::Type p_type, con
 	properties = true;
 	instance = nullptr;
 	virtuals_only = false;
+	signals = false;
 
 	popup_centered_ratio(0.6);
 	search_box->set_text("");
@@ -625,6 +649,29 @@ void PropertySelector::select_property_from_instance(Object *p_instance, const S
 	properties = true;
 	instance = p_instance;
 	virtuals_only = false;
+	signals = false;
+
+	popup_centered_ratio(0.6);
+	search_box->set_text("");
+	search_box->grab_focus();
+	_update_search();
+}
+
+void PropertySelector::select_signal_from_instance(Object *p_instance, const String &p_current) {
+	base_type = p_instance->get_class_name();
+	selected = p_current;
+	type = Variant::NIL;
+	script = ObjectID();
+	{
+		Ref<Script> scr = p_instance->get_script();
+		if (scr.is_valid()) {
+			script = scr->get_instance_id();
+		}
+	}
+	properties = false;
+	instance = p_instance;
+	virtuals_only = false;
+	signals = true;
 
 	popup_centered_ratio(0.6);
 	search_box->set_text("");

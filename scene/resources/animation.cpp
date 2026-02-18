@@ -104,6 +104,8 @@ bool Animation::_set(const StringName &p_name, const Variant &p_value) {
 				add_track(TYPE_AUDIO);
 			} else if (type == "animation") {
 				add_track(TYPE_ANIMATION);
+			} else if (type == "signal") {
+				add_track(TYPE_SIGNAL);
 			} else {
 				return false;
 			}
@@ -437,7 +439,35 @@ bool Animation::_set(const StringName &p_name, const Variant &p_value) {
 						TKey<StringName> ak;
 						ak.time = rt[i];
 						ak.value = rc[i];
-						an->values[i] = ak;
+						an->values[i] = std::move(ak);
+					}
+				}
+
+				return true;
+			} else if (track_get_type(track) == TYPE_SIGNAL) {
+				SignalTrack *st = static_cast<SignalTrack *>(tracks[track]);
+				Dictionary d = p_value;
+				ERR_FAIL_COND_V(!d.has("times"), false);
+				ERR_FAIL_COND_V(!d.has("signals"), false);
+
+				Vector<real_t> times = d["times"];
+				Vector<StringName> signals = d["signals"];
+
+				ERR_FAIL_COND_V(signals.size() != times.size(), false);
+
+				if (times.size()) {
+					int valcount = times.size();
+
+					const real_t *rt = times.ptr();
+					const StringName *rs = signals.ptr();
+
+					st->signals.resize(valcount);
+
+					for (int i = 0; i < valcount; i++) {
+						SignalKey sk;
+						sk.time = rt[i];
+						sk.signal = rs[i];
+						st->signals[i] = std::move(sk);
 					}
 				}
 
@@ -538,6 +568,9 @@ bool Animation::_get(const StringName &p_name, Variant &r_ret) const {
 					break;
 				case TYPE_ANIMATION:
 					r_ret = "animation";
+					break;
+				case TYPE_SIGNAL:
+					r_ret = "signal";
 					break;
 			}
 
@@ -854,6 +887,35 @@ bool Animation::_get(const StringName &p_name, Variant &r_ret) const {
 				r_ret = d;
 
 				return true;
+			} else if (track_get_type(track) == TYPE_SIGNAL) {
+				const SignalTrack *st = static_cast<const SignalTrack *>(tracks[track]);
+
+				Dictionary d;
+
+				Vector<real_t> key_times;
+				Vector<StringName> signals;
+
+				int kk = st->signals.size();
+
+				key_times.resize(kk);
+				signals.resize(kk);
+
+				real_t *wti = key_times.ptrw();
+				StringName *wsi = signals.ptrw();
+
+				const SignalKey *vls = st->signals.ptr();
+
+				for (int i = 0; i < kk; i++) {
+					wti[i] = vls[i].time;
+					wsi[i] = vls[i].signal;
+				}
+
+				d["times"] = key_times;
+				d["signals"] = signals;
+
+				r_ret = d;
+
+				return true;
 			}
 		} else {
 			return false;
@@ -934,6 +996,10 @@ int Animation::add_track(TrackType p_type, int p_at_pos) {
 			tracks.insert(p_at_pos, memnew(AnimationTrack));
 
 		} break;
+		case TYPE_SIGNAL: {
+			tracks.insert(p_at_pos, memnew(SignalTrack));
+
+		} break;
 		default: {
 			ERR_PRINT("Unknown track type");
 		}
@@ -994,6 +1060,11 @@ void Animation::remove_track(int p_track) {
 		case TYPE_ANIMATION: {
 			AnimationTrack *an = static_cast<AnimationTrack *>(t);
 			an->values.clear();
+
+		} break;
+		case TYPE_SIGNAL: {
+			SignalTrack *mt = static_cast<SignalTrack *>(t);
+			mt->signals.clear();
 
 		} break;
 	}
@@ -1538,6 +1609,12 @@ void Animation::track_remove_key(int p_track, int p_idx) {
 			an->values.remove_at(p_idx);
 
 		} break;
+		case TYPE_SIGNAL: {
+			SignalTrack *mt = static_cast<SignalTrack *>(t);
+			ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_idx, mt->signals.size());
+			mt->signals.remove_at(p_idx);
+
+		} break;
 	}
 
 	emit_changed();
@@ -1716,6 +1793,18 @@ int Animation::track_find_key(int p_track, double p_time, FindMode p_find_mode, 
 			return k;
 
 		} break;
+		case TYPE_SIGNAL: {
+			SignalTrack *mt = static_cast<SignalTrack *>(t);
+			int k = _find(mt->signals, p_time, p_backward, p_limit);
+			if ((uint32_t)k >= mt->signals.size()) {
+				return -1;
+			}
+			if ((p_find_mode == FIND_MODE_APPROX && !Math::is_equal_approx(mt->signals[k].time, p_time)) || (p_find_mode == FIND_MODE_EXACT && mt->signals[k].time != p_time)) {
+				return -1;
+			}
+			return k;
+
+		} break;
 	}
 
 	return -1;
@@ -1831,6 +1920,16 @@ int Animation::track_insert_key(int p_track, double p_time, const Variant &p_key
 			ret = _insert(p_time, at->values, ak);
 
 		} break;
+		case TYPE_SIGNAL: {
+			SignalTrack *mt = static_cast<SignalTrack *>(t);
+
+			SignalKey sk;
+			sk.time = p_time;
+			sk.signal = p_key;
+
+			ret = _insert(p_time, mt->signals, std::move(sk));
+
+		} break;
 	}
 
 	emit_changed();
@@ -1891,6 +1990,10 @@ int Animation::track_get_key_count(int p_track) const {
 		case TYPE_ANIMATION: {
 			AnimationTrack *at = static_cast<AnimationTrack *>(t);
 			return at->values.size();
+		} break;
+		case TYPE_SIGNAL: {
+			SignalTrack *mt = static_cast<SignalTrack *>(t);
+			return mt->signals.size();
 		} break;
 	}
 
@@ -1967,6 +2070,12 @@ Variant Animation::track_get_key_value(int p_track, int p_key_idx) const {
 			ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_key_idx, at->values.size(), Variant());
 
 			return at->values[p_key_idx].value;
+
+		} break;
+		case TYPE_SIGNAL: {
+			SignalTrack *st = static_cast<SignalTrack *>(t);
+			ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_key_idx, st->signals.size(), Variant());
+			return st->signals[p_key_idx].signal;
 
 		} break;
 	}
@@ -2055,6 +2164,12 @@ double Animation::track_get_key_time(int p_track, int p_key_idx) const {
 			AnimationTrack *at = static_cast<AnimationTrack *>(t);
 			ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_key_idx, at->values.size(), -1);
 			return at->values[p_key_idx].time;
+
+		} break;
+		case TYPE_SIGNAL: {
+			SignalTrack *st = static_cast<SignalTrack *>(t);
+			ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_key_idx, st->signals.size(), -1);
+			return st->signals[p_key_idx].time;
 
 		} break;
 	}
@@ -2152,6 +2267,15 @@ void Animation::track_set_key_time(int p_track, int p_key_idx, double p_time) {
 			_insert(p_time, at->values, key);
 			return;
 		}
+		case TYPE_SIGNAL: {
+			SignalTrack *st = static_cast<SignalTrack *>(t);
+			ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_key_idx, st->signals.size());
+			SignalKey key = st->signals[p_key_idx];
+			key.time = p_time;
+			st->signals.remove_at(p_key_idx);
+			_insert(p_time, st->signals, key);
+			return;
+		}
 	}
 
 	ERR_FAIL();
@@ -2214,6 +2338,9 @@ real_t Animation::track_get_key_transition(int p_track, int p_key_idx) const {
 		} break;
 		case TYPE_ANIMATION: {
 			return 1; //animation does not really use transitions
+		} break;
+		case TYPE_SIGNAL: {
+			return 1;
 		} break;
 	}
 
@@ -2344,6 +2471,12 @@ void Animation::track_set_key_value(int p_track, int p_key_idx, const Variant &p
 			at->values[p_key_idx].value = p_value;
 
 		} break;
+		case TYPE_SIGNAL: {
+			SignalTrack *st = static_cast<SignalTrack *>(t);
+			ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_key_idx, st->signals.size());
+
+			st->signals[p_key_idx].signal = p_value;
+		} break;
 	}
 
 	emit_changed();
@@ -2392,7 +2525,8 @@ void Animation::track_set_key_transition(int p_track, int p_key_idx, real_t p_tr
 		} break;
 		case TYPE_BEZIER:
 		case TYPE_AUDIO:
-		case TYPE_ANIMATION: {
+		case TYPE_ANIMATION:
+		case TYPE_SIGNAL: {
 			// they don't use transition
 		} break;
 	}
@@ -2984,6 +3118,16 @@ void Animation::track_get_key_indices_in_range(int p_track, double p_time, doubl
 							_track_get_key_indices_in_range(an->values, from_time, anim_end, p_indices, is_backward);
 						}
 					} break;
+					case TYPE_SIGNAL: {
+						const SignalTrack *st = static_cast<const SignalTrack *>(t);
+						if (!is_backward) {
+							_track_get_key_indices_in_range(st->signals, from_time, anim_end, p_indices, is_backward);
+							_track_get_key_indices_in_range(st->signals, anim_start, to_time, p_indices, is_backward);
+						} else {
+							_track_get_key_indices_in_range(st->signals, anim_start, to_time, p_indices, is_backward);
+							_track_get_key_indices_in_range(st->signals, from_time, anim_end, p_indices, is_backward);
+						}
+					} break;
 				}
 				return;
 			}
@@ -3079,6 +3223,11 @@ void Animation::track_get_key_indices_in_range(int p_track, double p_time, doubl
 						_track_get_key_indices_in_range(an->values, start, from_time, p_indices, true);
 						_track_get_key_indices_in_range(an->values, start, to_time, p_indices, false);
 					} break;
+					case TYPE_SIGNAL: {
+						const SignalTrack *st = static_cast<const SignalTrack *>(t);
+						_track_get_key_indices_in_range(st->signals, start, from_time, p_indices, true);
+						_track_get_key_indices_in_range(st->signals, start, to_time, p_indices, false);
+					} break;
 				}
 				return;
 			}
@@ -3150,6 +3299,11 @@ void Animation::track_get_key_indices_in_range(int p_track, double p_time, doubl
 						_track_get_key_indices_in_range(an->values, from_time, end, p_indices, false);
 						_track_get_key_indices_in_range(an->values, to_time, end, p_indices, true);
 					} break;
+					case TYPE_SIGNAL: {
+						const SignalTrack *st = static_cast<const SignalTrack *>(t);
+						_track_get_key_indices_in_range(st->signals, from_time, end, p_indices, false);
+						_track_get_key_indices_in_range(st->signals, to_time, end, p_indices, true);
+					} break;
 				}
 				return;
 			}
@@ -3214,6 +3368,10 @@ void Animation::track_get_key_indices_in_range(int p_track, double p_time, doubl
 		case TYPE_ANIMATION: {
 			const AnimationTrack *an = static_cast<const AnimationTrack *>(t);
 			_track_get_key_indices_in_range(an->values, from_time, to_time, p_indices, is_backward);
+		} break;
+		case TYPE_SIGNAL: {
+			const SignalTrack *st = static_cast<const SignalTrack *>(t);
+			_track_get_key_indices_in_range(st->signals, from_time, to_time, p_indices, is_backward);
 		} break;
 	}
 }
@@ -3304,10 +3462,10 @@ void Animation::set_marker_color(const StringName &p_name, const Color &p_color)
 
 Vector<Variant> Animation::method_track_get_params(int p_track, int p_key_idx) const {
 	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_track, tracks.size(), Vector<Variant>());
-	Track *t = tracks[p_track];
+	const Track *t = tracks[p_track];
 	ERR_FAIL_COND_V(t->type != TYPE_METHOD, Vector<Variant>());
 
-	MethodTrack *pm = static_cast<MethodTrack *>(t);
+	const MethodTrack *pm = static_cast<const MethodTrack *>(t);
 
 	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_key_idx, pm->methods.size(), Vector<Variant>());
 
@@ -3318,10 +3476,10 @@ Vector<Variant> Animation::method_track_get_params(int p_track, int p_key_idx) c
 
 StringName Animation::method_track_get_name(int p_track, int p_key_idx) const {
 	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_track, tracks.size(), StringName());
-	Track *t = tracks[p_track];
+	const Track *t = tracks[p_track];
 	ERR_FAIL_COND_V(t->type != TYPE_METHOD, StringName());
 
-	MethodTrack *pm = static_cast<MethodTrack *>(t);
+	const MethodTrack *pm = static_cast<const MethodTrack *>(t);
 
 	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_key_idx, pm->methods.size(), StringName());
 
@@ -3852,6 +4010,50 @@ StringName Animation::animation_track_get_key_animation(int p_track, int p_key) 
 	return at->values[p_key].value;
 }
 
+int Animation::signal_track_insert_key(int p_track, double p_time, const StringName &p_signal) {
+	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_track, tracks.size(), -1);
+	Track *t = tracks[p_track];
+	ERR_FAIL_COND_V(t->type != TYPE_SIGNAL, -1);
+
+	SignalTrack *st = static_cast<SignalTrack *>(t);
+
+	SignalKey k;
+	k.time = p_time;
+	k.signal = p_signal;
+
+	int key = _insert(p_time, st->signals, std::move(k));
+
+	emit_changed();
+
+	return key;
+}
+
+void Animation::signal_track_set_key_signal(int p_track, int p_key, const StringName &p_signal) {
+	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_track, tracks.size());
+	Track *t = tracks[p_track];
+	ERR_FAIL_COND(t->type != TYPE_SIGNAL);
+
+	SignalTrack *st = static_cast<SignalTrack *>(t);
+
+	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_key, st->signals.size());
+
+	st->signals[p_key].signal = p_signal;
+
+	emit_changed();
+}
+
+StringName Animation::signal_track_get_key_signal(int p_track, int p_key_idx) const {
+	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_track, tracks.size(), StringName());
+	const Track *t = tracks[p_track];
+	ERR_FAIL_COND_V(t->type != TYPE_SIGNAL, StringName());
+
+	const SignalTrack *st = static_cast<const SignalTrack *>(t);
+
+	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_key_idx, st->signals.size(), StringName());
+
+	return st->signals[p_key_idx].signal;
+}
+
 void Animation::set_length(real_t p_length) {
 	if (p_length < ANIM_MIN_LENGTH) {
 		p_length = ANIM_MIN_LENGTH;
@@ -4053,6 +4255,10 @@ void Animation::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("animation_track_set_key_animation", "track_idx", "key_idx", "animation"), &Animation::animation_track_set_key_animation);
 	ClassDB::bind_method(D_METHOD("animation_track_get_key_animation", "track_idx", "key_idx"), &Animation::animation_track_get_key_animation);
 
+	ClassDB::bind_method(D_METHOD("signal_track_insert_key", "track_idx", "time", "signal"), &Animation::signal_track_insert_key);
+	ClassDB::bind_method(D_METHOD("signal_track_set_key_signal", "track_idx", "key_idx", "animation"), &Animation::signal_track_set_key_signal);
+	ClassDB::bind_method(D_METHOD("signal_track_get_key_signal", "track_idx", "key_idx"), &Animation::signal_track_get_key_signal);
+
 	ClassDB::bind_method(D_METHOD("add_marker", "name", "time"), &Animation::add_marker);
 	ClassDB::bind_method(D_METHOD("remove_marker", "name"), &Animation::remove_marker);
 	ClassDB::bind_method(D_METHOD("has_marker", "name"), &Animation::has_marker);
@@ -4095,6 +4301,7 @@ void Animation::_bind_methods() {
 	BIND_ENUM_CONSTANT(TYPE_BEZIER);
 	BIND_ENUM_CONSTANT(TYPE_AUDIO);
 	BIND_ENUM_CONSTANT(TYPE_ANIMATION);
+	BIND_ENUM_CONSTANT(TYPE_SIGNAL);
 
 	BIND_ENUM_CONSTANT(INTERPOLATION_NEAREST);
 	BIND_ENUM_CONSTANT(INTERPOLATION_LINEAR);

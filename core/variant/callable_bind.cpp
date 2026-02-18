@@ -270,3 +270,24 @@ CallableCustomUnbind::CallableCustomUnbind(const Callable &p_callable, int p_arg
 	callable = p_callable;
 	argcount = p_argcount;
 }
+
+//////////////////////////////////
+
+int CallableCustomUnbindAll::get_argument_count(bool &r_is_valid) const {
+	CallableCustomUnbind::get_argument_count(r_is_valid);
+	return 0;
+}
+int CallableCustomUnbindAll::get_unbound_arguments_count() const {
+	return 0;
+}
+
+void CallableCustomUnbindAll::call(const Variant **p_arguments, int p_argcount, Variant &r_return_value, Callable::CallError &r_call_error) const {
+	CallableCustomUnbind::call(p_arguments, 0, r_return_value, r_call_error);
+}
+
+Error CallableCustomUnbindAll::rpc(int p_peer_id, const Variant **p_arguments, int p_argcount, Callable::CallError &r_call_error) const {
+	return CallableCustomUnbind::rpc(p_peer_id, p_arguments, 0, r_call_error);
+}
+
+CallableCustomUnbindAll::CallableCustomUnbindAll(const Callable &p_callable) : CallableCustomUnbind(p_callable, 0) {
+}

@@ -7892,6 +7892,8 @@ DisplayServerWindows::DisplayServerWindows(const String &p_rendering_driver, Win
 			ERR_FAIL_MSG("Could not initialize native OpenGL.");
 		}
 	}
+#else
+	(void)is_wine;
 #endif
 
 	bool should_create_main_window = true;
