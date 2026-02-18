@@ -80,7 +80,7 @@ private:
 	bool transient = false;
 	bool closable = false;
 
-	DockLayout current_layout;
+	DockLayout current_layout = DOCK_LAYOUT_ALL; // Init with a dummy value to force a layout update on first use.
 	BitField<DockLayout> available_layouts = DOCK_LAYOUT_VERTICAL | DOCK_LAYOUT_FLOATING;
 
 	bool is_open = false;
