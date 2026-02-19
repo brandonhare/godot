@@ -143,7 +143,7 @@ void MovieWriter::_bind_methods() {
 	GDVIRTUAL_BIND(_write_frame, "frame_image", "audio_frame_block")
 	GDVIRTUAL_BIND(_write_end)
 
-	ClassDB::bind_method(D_METHOD("write_begin", "movie_size, fps, base_path"), &MovieWriter::write_begin);
+	ClassDB::bind_method(D_METHOD("write_begin", "movie_size", "fps", "base_path"), &MovieWriter::write_begin);
 	ClassDB::bind_method(D_METHOD("write_frame", "frame_image"), &MovieWriter::write_frame_no_audio);
 	ClassDB::bind_method(D_METHOD("write_end"), &MovieWriter::write_end);
 
