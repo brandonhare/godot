@@ -223,7 +223,7 @@ void CameraFeed::set_rgb_image(const Ref<Image> &p_rgb_img) {
 void CameraFeed::set_ycbcr_image(const Ref<Image> &p_ycbcr_img) {
 	ERR_FAIL_COND(p_ycbcr_img.is_null());
 	if (active) {
-		images[CameraServer::FEED_YCBCR_IMAGE] = p_rgb_img->duplicate();
+		images[CameraServer::FEED_YCBCR_IMAGE] = p_ycbcr_img->duplicate();
 		int new_width = p_ycbcr_img->get_width();
 		int new_height = p_ycbcr_img->get_height();
 
