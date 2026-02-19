@@ -84,6 +84,7 @@ protected:
 
 	bool active; // only when active do we actually update the camera texture each frame
 	RID texture[CameraServer::FEED_IMAGES]; // texture images needed for this
+	Ref<Image> images[CameraServer::FEED_IMAGES];
 
 	static void _bind_methods();
 
@@ -104,6 +105,7 @@ public:
 	Transform2D get_transform() const;
 	void set_transform(const Transform2D &p_transform);
 
+	Ref<Image> get_image(CameraServer::FeedImage p_which);
 	RID get_texture(CameraServer::FeedImage p_which);
 	uint64_t get_texture_tex_id(CameraServer::FeedImage p_which);
 

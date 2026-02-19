@@ -53,6 +53,7 @@ void CameraFeed::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_ycbcr_images", "y_image", "cbcr_image"), &CameraFeed::set_ycbcr_images);
 	ClassDB::bind_method(D_METHOD("set_external", "width", "height"), &CameraFeed::set_external);
 	ClassDB::bind_method(D_METHOD("get_texture", "which"), &CameraFeed::get_texture);
+	ClassDB::bind_method(D_METHOD("get_image", "which"), &CameraFeed::get_image);
 	ClassDB::bind_method(D_METHOD("get_texture_tex_id", "feed_image_type"), &CameraFeed::get_texture_tex_id);
 
 	ClassDB::bind_method(D_METHOD("get_datatype"), &CameraFeed::get_datatype);
@@ -143,6 +144,10 @@ void CameraFeed::set_transform(const Transform2D &p_transform) {
 	transform = p_transform;
 }
 
+Ref<Image> CameraFeed::get_image(CameraServer::FeedImage p_which) {
+	return images[p_which];
+}
+
 RID CameraFeed::get_texture(CameraServer::FeedImage p_which) {
 	return texture[p_which];
 }
@@ -189,6 +194,7 @@ CameraFeed::~CameraFeed() {
 void CameraFeed::set_rgb_image(const Ref<Image> &p_rgb_img) {
 	ERR_FAIL_COND(p_rgb_img.is_null());
 	if (active) {
+		images[CameraServer::FEED_RGBA_IMAGE] = p_rgb_img->duplicate();
 		int new_width = p_rgb_img->get_width();
 		int new_height = p_rgb_img->get_height();
 
@@ -217,6 +223,7 @@ void CameraFeed::set_rgb_image(const Ref<Image> &p_rgb_img) {
 void CameraFeed::set_ycbcr_image(const Ref<Image> &p_ycbcr_img) {
 	ERR_FAIL_COND(p_ycbcr_img.is_null());
 	if (active) {
+		images[CameraServer::FEED_YCBCR_IMAGE] = p_rgb_img->duplicate();
 		int new_width = p_ycbcr_img->get_width();
 		int new_height = p_ycbcr_img->get_height();
 
@@ -246,6 +253,8 @@ void CameraFeed::set_ycbcr_images(const Ref<Image> &p_y_img, const Ref<Image> &p
 	ERR_FAIL_COND(p_y_img.is_null());
 	ERR_FAIL_COND(p_cbcr_img.is_null());
 	if (active) {
+		images[CameraServer::FEED_Y_IMAGE] = p_y_img->duplicate();
+		images[CameraServer::FEED_CBCR_IMAGE] = p_cbcr_img->duplicate();
 		///@TODO investigate whether we can use thirdparty/misc/yuv2rgb.h here to convert our YUV data to RGB, our shader approach is potentially faster though..
 		// Wondering about including that into multiple projects, may cause issues.
 		// That said, if we convert to RGB, we could enable using texture resources again...
