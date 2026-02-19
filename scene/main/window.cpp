@@ -857,7 +857,7 @@ void Window::_event_callback(DisplayServer::WindowEvent p_event) {
 			Window *root = get_tree()->get_root();
 			if (!root->gui.windowmanager_window_over) {
 #ifdef DEV_ENABLED
-				WARN_PRINT_ONCE("Exiting a window while no window is hovered should never happen in DisplayServer.");
+				// WARN_PRINT_ONCE("Exiting a window while no window is hovered should never happen in DisplayServer.");
 #endif // DEV_ENABLED
 				return;
 			}
