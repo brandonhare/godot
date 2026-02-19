@@ -212,7 +212,7 @@ class Noise : public Resource {
 				images.write[i + half_depth] = img;
 			}
 
-			Vector<Ref<Image>> new_images = images;
+			Vector<Ref<Image>> new_images;
 			new_images.resize(p_depth);
 
 			// Scale seamless generation to third dimension.
