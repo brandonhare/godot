@@ -1164,7 +1164,7 @@ Error ResourceLoader::rename_dependencies(const String &p_path, const HashMap<St
 }
 
 void ResourceLoader::get_classes_used(const String &p_path, HashSet<StringName> *r_classes) {
-	String local_path = _validate_local_path(p_path);
+	String local_path = _path_remap(_validate_local_path(p_path));
 
 	for (int i = 0; i < loader_count; i++) {
 		if (!loader[i]->recognize_path(local_path)) {
@@ -1176,7 +1176,7 @@ void ResourceLoader::get_classes_used(const String &p_path, HashSet<StringName> 
 }
 
 String ResourceLoader::get_resource_type(const String &p_path) {
-	String local_path = _validate_local_path(p_path);
+	String local_path = _path_remap(_validate_local_path(p_path));
 
 	for (int i = 0; i < loader_count; i++) {
 		String result = loader[i]->get_resource_type(local_path);
@@ -1189,7 +1189,7 @@ String ResourceLoader::get_resource_type(const String &p_path) {
 }
 
 String ResourceLoader::get_resource_script_class(const String &p_path) {
-	String local_path = _validate_local_path(p_path);
+	String local_path = _path_remap(_validate_local_path(p_path));
 
 	for (int i = 0; i < loader_count; i++) {
 		String result = loader[i]->get_resource_script_class(local_path);
